@@ -1,4 +1,4 @@
-# YouTube Summarizer with Llama 3
+# YouTube Summarizer By Case Done
 
 ![UI example](./docs/UI%20example.png)
 
