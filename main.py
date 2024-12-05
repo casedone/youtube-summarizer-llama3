@@ -1,13 +1,3 @@
-# %%
-# !pip install gradio openai langchain langchain-community youtube_transcript_api tiktoken transformers langchain-ollama
-
-# %% [markdown]
-# # YouTube Summarizer by Case Done
-# - This app will get YouTube info and transcript, and allow you to summarize it.
-# - It is based on LangChain map-reduce method powered by Llama 3.2 via Ollama.
-# - Start by providing a valid YouTube URL in the textbox.
-
-# %%
 from youtube_transcript_api import YouTubeTranscriptApi
 import re
 from urllib.request import urlopen
