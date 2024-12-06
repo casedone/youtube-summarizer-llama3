@@ -10,6 +10,9 @@ package-mode = false
 python = ">=3.12,<3.14"
 youtube-transcript-api = "^0.6.3"
 transformers = "^4.47.0"
+torch = "^2.5.1"
+torchvision = "^0.20.1"
+torchaudio = "^2.5.1"
 
 
 [build-system]
