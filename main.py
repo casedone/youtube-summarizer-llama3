@@ -1,4 +1,3 @@
-
 from youtube_transcript_api import YouTubeTranscriptApi
 import re
 from urllib.request import urlopen
@@ -12,7 +11,7 @@ from langchain_ollama import ChatOllama
 import tiktoken
 from tqdm import tqdm
 
-
+# Prompt templates
 MAP_TEMPLATE_TXT = """Write a detail summary of this text section in bullet points. 
 Use '-' for bullet points and answer only the bullet points.
 Text:
@@ -26,10 +25,6 @@ Text:
 {text}
 
 FINAL SUMMARY:"""
-
-map_prompt_txt = MAP_TEMPLATE_TXT
-combine_prompt_txt = COMBINE_TEMPLATE_TXT
-
 
 QUESTION_TEMPLATE_TXT = """Write a detailed summary (in bullet points, using "-" for bullets) of the following:
 <text>
@@ -54,35 +49,29 @@ If the context isn't useful, return the original summary. Answer your summary on
 Final Summary:
 """
 
-refine_prompt_txt = REFINE_TEMPLATE_TXT
-question_prompt_txt = QUESTION_TEMPLATE_TXT
-
-
-# # Configuration Settings
-
+# Configuration settings
 model = "llama3.2"
 base_url = "http://localhost:11434"
-
-chunk_size = 2000 # this is in tokens
-overlap_size = 0 # this is in tokens
+chunk_size = 2000  # this is in tokens
+overlap_size = 0  # this is in tokens
 temperature = 0.5
-
 mapreduce_num_predict = 512
-map_num_predict = 512 # number of tokens to predict, Default: 128, -1 = infinite generation, -2 = fill context
+map_num_predict = 512  # number of tokens to predict, Default: 128, -1 = infinite generation, -2 = fill context
 combine_num_predict = 2048
 refine_num_predict = 2048
 
 global config
-config = {}
-config["model"] = model
-config["base_url"] = base_url
-config["chunk_size"] = chunk_size
-config["overlap_size"] = overlap_size
-config["temperature"] = temperature
-config["mapreduce_num_predict"] = mapreduce_num_predict
-config["map_num_predict"] = map_num_predict
-config["combine_num_predict"] = combine_num_predict
-config["refine_num_predict"] = refine_num_predict
+config = {
+    "model": model,
+    "base_url": base_url,
+    "chunk_size": chunk_size,
+    "overlap_size": overlap_size,
+    "temperature": temperature,
+    "mapreduce_num_predict": mapreduce_num_predict,
+    "map_num_predict": map_num_predict,
+    "combine_num_predict": combine_num_predict,
+    "refine_num_predict": refine_num_predict
+}
 
 global text_to_summarize
 text_to_summarize = ""
@@ -90,26 +79,20 @@ text_to_summarize = ""
 
 def get_youtube_info(url: str):
     """Get video title and description."""
-    # try:
     video_id = extract_video_id(url)
     if not video_id:
         raise ValueError("Invalid YouTube URL")
         
-    # Get video page content
     video_url = f"https://youtube.com/watch?v={video_id}"
     content = urlopen(video_url).read().decode('utf-8')
     
-    # Extract title
     title_match = re.search(r'"title":"([^"]+)"', content)
     title = html.unescape(title_match.group(1)) if title_match else "Unknown Title"
     
-    # Extract description
     desc_match = re.search(r'"description":{"simpleText":"([^"]+)"', content)
     description = html.unescape(desc_match.group(1)) if desc_match else "No description available"
     
     return title, description
-    # except Exception as e:
-    #     return {"title": "Error", "description": str(e)}
     
     
 def extract_video_id(url):
@@ -126,16 +109,22 @@ def extract_video_id(url):
             return match.group(1)
     return None
 
+
 def get_text_splitter(chunk_size: int, overlap_size: int):
+    """Get text splitter."""
     return RecursiveCharacterTextSplitter.from_tiktoken_encoder(chunk_size=chunk_size, chunk_overlap=overlap_size)
 
+
 def convert_text_to_tokens(text, encoder="gpt-3.5-turbo"):
+    """Convert text to tokens."""
     enc = tiktoken.encoding_for_model(encoder)
     return enc.encode(text)
 
+
 def get_larger_context_size(token_count):
-    num_ctxes = [1024*i for i in range(1, 100)]
-    num_ctx = next(ctx for ctx in num_ctxes if ctx > token_count) # pick the first context size that is greater than the token counts
+    """Get larger context size."""
+    num_ctxes = [1024 * i for i in range(1, 100)]
+    num_ctx = next(ctx for ctx in num_ctxes if ctx > token_count)
     return num_ctx
 
 
@@ -150,15 +139,11 @@ def get_youtube_transcript(url):
         str: Full transcript text
     """
     try:
-        # Extract video ID from URL
         video_id = extract_video_id(url)
         if not video_id:
             raise ValueError("Invalid YouTube URL")
             
-        # Get transcript
         transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
-        
-        # Combine transcript pieces
         full_transcript = ' '.join(entry['text'] for entry in transcript_list)
 
         enc = tiktoken.encoding_for_model("gpt-4")
@@ -170,7 +155,8 @@ def get_youtube_transcript(url):
         return f"Error: {str(e)}", 0
     
     
-def get_llm(model: str, base_url: str, temperature: float, num_ctx: int=2048, num_predict: int=256):
+def get_llm(model: str, base_url: str, temperature: float, num_ctx: int = 2048, num_predict: int = 256):
+    """Get LLM."""
     llm = ChatOllama(
         model=model,
         base_url=base_url,
@@ -182,17 +168,15 @@ def get_llm(model: str, base_url: str, temperature: float, num_ctx: int=2048, nu
 
 
 def convert_text_to_split_docs(text, chunk_size, overlap_size):
-    docs = [Document(
-        page_content=text,
-        # metadata={"source": url}
-    )]
+    """Convert text to split documents."""
+    docs = [Document(page_content=text)]
     text_splitter = get_text_splitter(chunk_size=chunk_size, overlap_size=overlap_size)
     split_docs = text_splitter.split_documents(docs)
     return split_docs
     
     
-def get_summary_map_reduce_langchain(text_to_summarize: str, map_prompt_txt: str, combine_prompt_text:str):
-
+def get_summary_map_reduce_langchain(text_to_summarize: str, map_prompt_txt: str, combine_prompt_text: str):
+    """Get summary using map-reduce method with LangChain."""
     global config
     chunk_size = config["chunk_size"]
     overlap_size = config["overlap_size"]
@@ -201,36 +185,24 @@ def get_summary_map_reduce_langchain(text_to_summarize: str, map_prompt_txt: str
     temperature = config["temperature"]
     mapreduce_num_predict = config["mapreduce_num_predict"]
     
-    # transcript, tokencount = get_youtube_transcript(url)
     split_docs = convert_text_to_split_docs(text_to_summarize, chunk_size, overlap_size)
     
-    tokens = (mapreduce_num_predict+chunk_size)
+    tokens = (mapreduce_num_predict + chunk_size)
     num_ctx = get_larger_context_size(tokens)
     llm = get_llm(model, base_url, temperature, num_predict=mapreduce_num_predict, num_ctx=num_ctx)
 
-    map_prompt = PromptTemplate(
-        template=map_prompt_txt,
-        input_variables=["text"]
-    )
-
-    combine_prompt = PromptTemplate(
-        template=combine_prompt_text,
-        input_variables=["text"]
-    )
+    map_prompt = PromptTemplate(template=map_prompt_txt, input_variables=["text"])
+    combine_prompt = PromptTemplate(template=combine_prompt_text, input_variables=["text"])
     
-    chain = load_summarize_chain(llm, 
-                                 chain_type="map_reduce",
-                                 map_prompt=map_prompt,
-                                 combine_prompt=combine_prompt,
-                                 verbose=True
-                                 )
+    chain = load_summarize_chain(llm, chain_type="map_reduce", map_prompt=map_prompt, combine_prompt=combine_prompt, verbose=True)
     
     output = chain.invoke(split_docs)
     
     return output['output_text']
 
-def get_summary_map_reduce_manual(text_to_summarize: str, map_prompt_txt: str, combine_prompt_text:str):
 
+def get_summary_map_reduce_manual(text_to_summarize: str, map_prompt_txt: str, combine_prompt_text: str):
+    """Get summary using map-reduce method manually."""
     global config
     chunk_size = config["chunk_size"]
     overlap_size = config["overlap_size"]
@@ -242,43 +214,30 @@ def get_summary_map_reduce_manual(text_to_summarize: str, map_prompt_txt: str, c
     
     split_docs = convert_text_to_split_docs(text_to_summarize, chunk_size, overlap_size)
     
-    map_prompt = PromptTemplate(
-        template=map_prompt_txt,
-        input_variables=["text"]
-    )
+    map_prompt = PromptTemplate(template=map_prompt_txt, input_variables=["text"])
+    combine_prompt = PromptTemplate(template=combine_prompt_text, input_variables=["text"])
 
-    combine_prompt = PromptTemplate(
-        template=combine_prompt_text,
-        input_variables=["text"]
-    )
-
-    map_num_ctx = get_larger_context_size(map_num_predict+chunk_size)
-
+    map_num_ctx = get_larger_context_size(map_num_predict + chunk_size)
     llm_map = get_llm(model, base_url, temperature, num_predict=map_num_predict, num_ctx=map_num_ctx)
     
     summaries = []
-
-    for i, splic_doc in enumerate(tqdm(split_docs, desc="Mapping...")):
+    for splic_doc in tqdm(split_docs, desc="Mapping..."):
         full_prompt = map_prompt.format_prompt(text=splic_doc.page_content)
         output = llm_map.invoke(full_prompt.text)
         summaries.append(output.content)
     
     combined_summaries = "\n".join(summaries)
-
     full_prompt = combine_prompt.format_prompt(text=combined_summaries)
-
     token_counts = len(convert_text_to_tokens(full_prompt.text))
-
-    combine_num_ctx = get_larger_context_size(token_counts+combine_num_predict)
-
+    combine_num_ctx = get_larger_context_size(token_counts + combine_num_predict)
     llm_combine = get_llm(model, base_url, temperature, num_predict=combine_num_predict, num_ctx=combine_num_ctx)
-
     output_comb = llm_combine.invoke(full_prompt.text)
 
     return output_comb.content
 
-def get_summary_refine_langchain(text_to_summarize: str, refine_prompt_txt: str, question_prompt_text:str):
 
+def get_summary_refine_langchain(text_to_summarize: str, refine_prompt_txt: str, question_prompt_text: str):
+    """Get summary using refine method with LangChain."""
     global config
     chunk_size = config["chunk_size"]
     overlap_size = config["overlap_size"]
@@ -289,35 +248,18 @@ def get_summary_refine_langchain(text_to_summarize: str, refine_prompt_txt: str,
     
     split_docs = convert_text_to_split_docs(text_to_summarize, chunk_size, overlap_size)
     
-    refine_prompt = PromptTemplate.from_template(
-        template=refine_prompt_txt,
-        # input_variables=["text", "existing_answer"]
-    )
-
-    question_prompt = PromptTemplate.from_template(
-        template=question_prompt_text,
-        # input_variables=["text"]
-    )
-
-    num_ctx = get_larger_context_size(int(2*(refine_num_predict+chunk_size)))
-    
+    refine_prompt = PromptTemplate.from_template(template=refine_prompt_txt)
+    question_prompt = PromptTemplate.from_template(template=question_prompt_text)
+    num_ctx = get_larger_context_size(int(2 * (refine_num_predict + chunk_size)))
     llm = get_llm(model, base_url, temperature, num_predict=refine_num_predict, num_ctx=num_ctx)
     
-    chain = load_summarize_chain(
-        llm, 
-        chain_type="refine",
-        question_prompt=question_prompt,
-        refine_prompt=refine_prompt,
-        document_variable_name="text", 
-        initial_response_name="existing_answer",
-        verbose=True
-    )
-
+    chain = load_summarize_chain(llm, chain_type="refine", question_prompt=question_prompt, refine_prompt=refine_prompt, document_variable_name="text", initial_response_name="existing_answer", verbose=True)
     output_comb = chain.invoke(split_docs)
 
     return output_comb['output_text']
 
-# Add functions to update global variables
+
+# Functions to update global variables
 def update_model(value):
     global config
     config["model"] = value
@@ -359,6 +301,7 @@ def update_token_count(text):
     count = len(enc.encode(text))
     return count
 
+
 with open("sample-text.txt", "r") as f:
     sample_text = f.read()
 
@@ -378,7 +321,6 @@ with gr.Blocks() as demo:
             bttn_clear = gr.ClearButton(interactive=True, variant='stop')
     
     with gr.Tab(label="YouTube") as tab1:
-        
         gr.Markdown("## Input YouTube Link Here:")
         url = gr.Textbox(label='YouTube URL', value="https://youtu.be/bvPDQ4-0LAQ")
         
@@ -387,18 +329,14 @@ with gr.Blocks() as demo:
             with gr.Column(scale=4):
                 with gr.Accordion("YouTube Information"):
                     title = gr.Textbox(label='Title', lines=2, max_lines=5, show_copy_button=True)
-                    desc = gr.Textbox(label='Description', lines=10, max_lines=20, 
-                                      autoscroll=False, show_copy_button=True)
+                    desc = gr.Textbox(label='Description', lines=10, max_lines=20, autoscroll=False, show_copy_button=True)
             with gr.Column(scale=1, min_width=25):
-                bttn_info_get = gr.Button('Get Info', variant='primary', )
+                bttn_info_get = gr.Button('Get Info', variant='primary')
         
         gr.Markdown("## Transcript")
         with gr.Row(equal_height=False):              
             with gr.Column(scale=4):
-                trns_raw = gr.Textbox(label='Text to Summarize', show_copy_button=True, autoscroll=True,
-                                      lines=10, max_lines=500,
-                                      value="",
-                                      interactive=True)
+                trns_raw = gr.Textbox(label='Text to Summarize', show_copy_button=True, autoscroll=True, lines=10, max_lines=500, value="", interactive=True)
             with gr.Column(scale=1, min_width=25):
                 bttn_trns_get = gr.Button("Get Transcript", variant='primary')
                 gr.Markdown("### Or ...")
@@ -424,7 +362,6 @@ with gr.Blocks() as demo:
                     temperature.change(fn=update_temperature, inputs=temperature)
 
         gr.Markdown("## Text Splitting Parameters")
-        # with gr.Accordion(label='Text Splitting Parameters', open=False):
         with gr.Group():
             with gr.Row():
                 with gr.Column(scale=1, min_width=100):
@@ -435,7 +372,6 @@ with gr.Blocks() as demo:
                     overlap.change(fn=update_overlap_size, inputs=overlap)
 
         gr.Markdown("## Approaches")
-        # with gr.Tabs() as tabs:
         with gr.Tab(label="Map-Reduce LangChain") as tab_mrlc:
             with gr.Row():
                 with gr.Column(scale=1, min_width=25):
@@ -443,10 +379,8 @@ with gr.Blocks() as demo:
                     mapreduce_num_predict.change(fn=update_mapreduce_num_predict, inputs=mapreduce_num_predict)
                 with gr.Column(scale=4):
                     with gr.Accordion(label="Prompt Templates", open=False):
-                        map_prompt_txt_mrlc = gr.Textbox(label="Prompt for the mapping step", value=MAP_TEMPLATE_TXT,
-                                                        lines=10, max_lines=50, show_copy_button=True, interactive=True)
-                        combine_prompt_txt_mrlc = gr.Textbox(label="Prompt for the combine step", value=COMBINE_TEMPLATE_TXT,
-                                                        lines=10, max_lines=50, show_copy_button=True, interactive=True)
+                        map_prompt_txt_mrlc = gr.Textbox(label="Prompt for the mapping step", value=MAP_TEMPLATE_TXT, lines=10, max_lines=50, show_copy_button=True, interactive=True)
+                        combine_prompt_txt_mrlc = gr.Textbox(label="Prompt for the combine step", value=COMBINE_TEMPLATE_TXT, lines=10, max_lines=50, show_copy_button=True, interactive=True)
             with gr.Row():
                 with gr.Column(scale=1, min_width=25):
                     bttn_summ_mrlc = gr.Button("Summarize with Map-Reduce LangChain", variant='primary')
@@ -464,10 +398,8 @@ with gr.Blocks() as demo:
                     combine_num_predict.change(fn=update_combine_num_predict, inputs=combine_num_predict)
                 with gr.Column(scale=4):
                     with gr.Accordion(label="Prompt Templates", open=False):
-                        map_prompt_txt_mrmn = gr.Textbox(label="Prompt for the mapping step", value=MAP_TEMPLATE_TXT,
-                                                        lines=10, max_lines=50, show_copy_button=True)
-                        combine_prompt_txt_mrmn = gr.Textbox(label="Prompt for the combine step", value=COMBINE_TEMPLATE_TXT,
-                                                        lines=10, max_lines=50, show_copy_button=True)
+                        map_prompt_txt_mrmn = gr.Textbox(label="Prompt for the mapping step", value=MAP_TEMPLATE_TXT, lines=10, max_lines=50, show_copy_button=True)
+                        combine_prompt_txt_mrmn = gr.Textbox(label="Prompt for the combine step", value=COMBINE_TEMPLATE_TXT, lines=10, max_lines=50, show_copy_button=True)
             with gr.Row():
                 with gr.Column(scale=1, min_width=25):
                     bttn_summ_mrmn = gr.Button("Summarize with Map-Reduce Manual", variant='primary')
@@ -482,10 +414,8 @@ with gr.Blocks() as demo:
                     refine_num_predict.change(fn=update_refine_num_predict, inputs=refine_num_predict)
                 with gr.Column(scale=4):
                     with gr.Accordion(label="Prompt Templates", open=False):
-                        question_prompt_txt_rl = gr.Textbox(label="Prompt for the each split doc", value=QUESTION_TEMPLATE_TXT,
-                                                        lines=10, max_lines=50, show_copy_button=True, interactive=True)
-                        refine_prompt_txt_rl = gr.Textbox(label="Prompt for the refine step", value=REFINE_TEMPLATE_TXT,
-                                                        lines=10, max_lines=50, show_copy_button=True, interactive=True)
+                        question_prompt_txt_rl = gr.Textbox(label="Prompt for the each split doc", value=QUESTION_TEMPLATE_TXT, lines=10, max_lines=50, show_copy_button=True, interactive=True)
+                        refine_prompt_txt_rl = gr.Textbox(label="Prompt for the refine step", value=REFINE_TEMPLATE_TXT, lines=10, max_lines=50, show_copy_button=True, interactive=True)
             with gr.Row():
                 with gr.Column(scale=1, min_width=25):
                     bttn_summ_rflc = gr.Button("Summarize with Refine LangChain", variant='primary')
