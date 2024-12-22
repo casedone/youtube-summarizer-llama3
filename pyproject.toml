@@ -13,6 +13,11 @@ transformers = "^4.47.0"
 torch = "^2.5.1"
 torchvision = "^0.20.1"
 torchaudio = "^2.5.1"
+langchain-core = "^0.3.28"
+langchain-openai = "^0.2.14"
+langchain-ollama = "^0.2.2"
+langchain = "^0.3.13"
+pandas = "^2.2.3"
 
 
 [build-system]
